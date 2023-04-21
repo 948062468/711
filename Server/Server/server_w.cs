@@ -1,9 +1,10 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Windows.Forms;
+using System.Security.Cryptography;
 
 namespace Server
 {
@@ -16,7 +17,92 @@ namespace Server
         {
             InitializeComponent();
             StartServer();
+            SplitAllFilesIntoChunks();
         }
+
+        private void SplitAllFilesIntoChunks()
+        {
+            var files = Directory.GetFiles("../../../all_files");
+
+            foreach (var file in files)
+            {
+                string fileName = Path.GetFileName(file);
+
+                // 创建名为 filename_chunk 的文件夹
+                string chunkFolder = Path.Combine("../../../chunks", fileName + "_chunk");
+
+                // 如果文件夹已经存在，删除原有文件夹并创建新的文件夹
+                if (Directory.Exists(chunkFolder))
+                {
+                    Directory.Delete(chunkFolder, true);
+                }
+                Directory.CreateDirectory(chunkFolder);
+
+                // 对图片文件进行可变大小的切割
+                byte[] fileData = File.ReadAllBytes(file);
+                List<byte[]> chunks = SplitFileIntoChunks(fileData); // 这是一个需要实现的方法，可以使用滚动哈希实现
+
+                // 将切割得到的数据块存储在 filename_chunk 文件夹中
+                int chunkIndex = 0;
+                foreach (var chunk in chunks)
+                {
+                    string chunkFilePath = Path.Combine(chunkFolder, chunkIndex.ToString() + ".chunk");
+                    File.WriteAllBytes(chunkFilePath, chunk);
+                    chunkIndex++;
+                }
+            }
+        }
+
+        // 实现此方法以使用滚动哈希将文件分割成可变大小的块
+        private List<byte[]> SplitFileIntoChunks(byte[] fileData)
+        {
+            List<byte[]> chunks = new List<byte[]>();
+            int fixedLength = 48;
+            MemoryStream currentChunk = new MemoryStream();
+
+            int i = 0;
+            for (; i < fileData.Length - fixedLength + 1; i++)
+            {
+                byte[] tempData = new byte[fixedLength];
+                Array.Copy(fileData, i, tempData, 0, fixedLength);
+                byte[] hash = CalculateSHA256(tempData);
+
+                if (BitConverter.ToUInt64(hash, 0) % 2048 == 0)
+                {
+                    // 当前满足条件，进行切割
+                    currentChunk.WriteByte(fileData[i]);
+                    chunks.Add(currentChunk.ToArray());
+                    currentChunk = new MemoryStream();
+                }
+                else
+                {
+                    // 将数据添加到当前块
+                    currentChunk.WriteByte(fileData[i]);
+                }
+            }
+
+            // 将剩余的数据添加到最后一个块
+            for (; i < fileData.Length; i++)
+            {
+                currentChunk.WriteByte(fileData[i]);
+            }
+            chunks.Add(currentChunk.ToArray());
+
+            return chunks;
+        }
+
+
+
+
+        private byte[] CalculateSHA256(byte[] data)
+        {
+            using (SHA256 sha256 = SHA256.Create())
+            {
+                return sha256.ComputeHash(data);
+            }
+        }
+
+
 
         private void StartServer()
         {
@@ -25,18 +111,19 @@ namespace Server
             _listener.BeginAcceptTcpClient(ClientConnected, null);
         }
 
-    private void ClientConnected(IAsyncResult ar)
-    {
-        TcpClient client = _listener.EndAcceptTcpClient(ar);
-        _listener.BeginAcceptTcpClient(ClientConnected, null);
 
-        using (NetworkStream stream = client.GetStream())
-        using (StreamReader reader = new StreamReader(stream, Encoding.UTF8))
-        using (StreamWriter writer = new StreamWriter(stream, Encoding.UTF8))
+        private void ClientConnected(IAsyncResult ar)
         {
-            string command = reader.ReadLine();
-            if (command == "LIST_FILES")
+            TcpClient client = _listener.EndAcceptTcpClient(ar);
+            _listener.BeginAcceptTcpClient(ClientConnected, null);
+
+            using (NetworkStream stream = client.GetStream())
+            using (StreamReader reader = new StreamReader(stream, Encoding.UTF8))
+            using (StreamWriter writer = new StreamWriter(stream, Encoding.UTF8))
             {
+                string command = reader.ReadLine();
+                if (command == "LIST_FILES")
+                {
                     var files = Directory.GetFiles("../../../available_files");
                     writer.WriteLine(files.Length);
                     foreach (var file in files)
@@ -44,38 +131,111 @@ namespace Server
                         writer.WriteLine(Path.GetFileName(file));
                     }
                 }
-            else if (command == "SEND_FILE")
-            {
-                string requestedFile = reader.ReadLine();
-                string sourcePath = Path.Combine("../../../available_files", requestedFile);
-                if (File.Exists(sourcePath))
+                //处理chunk
+                else if (command == "SEND_FILE")
                 {
-                    writer.WriteLine("FILE_FOUND");
-                    writer.Flush();
-
-                    using (FileStream fileStream = File.OpenRead(sourcePath))
+                    string requestedFile = reader.ReadLine();
+                    string sourcePath = Path.Combine("../../../available_files", requestedFile);
+                    if (File.Exists(sourcePath))
                     {
-                        byte[] buffer = new byte[4096];
-                        int bytesRead;
+                        writer.WriteLine("FILE_FOUND");
+                        writer.Flush();
 
-                        while ((bytesRead = fileStream.Read(buffer, 0, buffer.Length)) > 0)
+                        // 获取碎片文件夹路径
+                        string chunksFolderPath = Path.Combine("../../../chunks", requestedFile + "_chunk");
+                        DirectoryInfo chunksDirectory = new DirectoryInfo(chunksFolderPath);
+
+                        // 读取 cache_hash.txt 中的哈希值
+                        string cacheHashPath = "../../../cache_hash.txt";
+                        HashSet<string> cacheHashes = new HashSet<string>();
+                        if (File.Exists(cacheHashPath))
                         {
-                            stream.Write(buffer, 0, bytesRead);
-                            if (bytesRead < buffer.Length) break;
+                            using (StreamReader sr = new StreamReader(cacheHashPath))
+                            {
+                                string line;
+                                while ((line = sr.ReadLine()) != null)
+                                {
+                                    cacheHashes.Add(line);
+                                }
+                            }
                         }
+
+                        // 遍历碎片文件夹
+                        foreach (FileInfo chunkFile in chunksDirectory.GetFiles())
+                        {
+                            byte[] chunkData = File.ReadAllBytes(chunkFile.FullName);
+                            byte[] hashData = CalculateSHA256(chunkData);
+                            string hashString = BitConverter.ToString(hashData).Replace("-", "").ToLower();
+
+                            if (cacheHashes.Contains(hashString))
+                            {
+                                // 告诉请求者哈希值
+                                writer.WriteLine("HASH:" + hashString);
+                            }
+                            else
+                            {
+                                // 发送碎片块给请求者
+                                writer.WriteLine("CHUNK:" + hashString);
+                                stream.Write(chunkData, 0, chunkData.Length);
+
+                                // 将新的哈希值记录到 cache_hash.txt 中
+                                using (StreamWriter sw = File.AppendText(cacheHashPath))
+                                {
+                                    sw.WriteLine(hashString);
+                                }
+
+                                // 将新的哈希值添加到 HashSet 中
+                                cacheHashes.Add(hashString);
+                            }
+                            writer.Flush();
+                        }
+
+                        // 发送结束信号
+                        writer.WriteLine("END_OF_FILE");
+                        writer.Flush();
+                    }
+                    else
+                    {
+                        writer.WriteLine("FILE_NOT_FOUND");
+                        writer.Flush();
                     }
                 }
-                else
+
+
+                /*原本传输整个文件
+                else if (command == "SEND_FILE")
                 {
-                    writer.WriteLine("FILE_NOT_FOUND");
-                    writer.Flush();
+                    string requestedFile = reader.ReadLine();
+                    string sourcePath = Path.Combine("../../../available_files", requestedFile);
+                    if (File.Exists(sourcePath))
+                    {
+                        writer.WriteLine("FILE_FOUND");
+                        writer.Flush();
+
+                        using (FileStream fileStream = File.OpenRead(sourcePath))
+                        {
+                            byte[] buffer = new byte[4096];
+                            int bytesRead;
+
+                            while ((bytesRead = fileStream.Read(buffer, 0, buffer.Length)) > 0)
+                            {
+                                stream.Write(buffer, 0, bytesRead);
+                                if (bytesRead < buffer.Length) break;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        writer.WriteLine("FILE_NOT_FOUND");
+                        writer.Flush();
+                    }
                 }
+                */
             }
         }
-    }
 
 
-    private void button1_Click(object sender, EventArgs e)
+        private void button1_Click(object sender, EventArgs e)
         {
             listBox1.Items.Clear();
             var files = Directory.GetFiles("../../../all_files");
@@ -110,12 +270,12 @@ namespace Server
                 }
                 else
                 {
-                    MessageBox.Show("�ļ��Ѵ����� available_files �ļ����С�", "��ʾ", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    MessageBox.Show("ÎÄ¼þÒÑ´æÔÚÓÚ available_files ÎÄ¼þ¼ÐÖÐ¡£", "ÌáÊ¾", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
             }
             else
             {
-                MessageBox.Show("���ȴ� all_files �б���ѡ��һ���ļ���", "��ʾ", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("ÇëÏÈ´Ó all_files ÁÐ±íÖÐÑ¡ÔñÒ»¸öÎÄ¼þ¡£", "ÌáÊ¾", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
 
@@ -133,5 +293,11 @@ namespace Server
         {
 
         }
+
+        private void listBox2_SelectedIndexChanged(object sender, EventArgs e)
+        {
+
+        }
+
     }
 }

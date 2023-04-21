@@ -28,75 +28,82 @@
         /// </summary>
         private void InitializeComponent()
         {
-            button1 = new Button();
-            listBox1 = new ListBox();
-            button2 = new Button();
-            listBox2 = new ListBox();
-            button3 = new Button();
-            SuspendLayout();
+            this.button1 = new System.Windows.Forms.Button();
+            this.listBox1 = new System.Windows.Forms.ListBox();
+            this.button2 = new System.Windows.Forms.Button();
+            this.listBox2 = new System.Windows.Forms.ListBox();
+            this.button3 = new System.Windows.Forms.Button();
+            this.SuspendLayout();
             // 
             // button1
             // 
-            button1.Location = new Point(30, 24);
-            button1.Name = "button1";
-            button1.Size = new Size(186, 46);
-            button1.TabIndex = 0;
-            button1.Text = "查看所有文件";
-            button1.UseVisualStyleBackColor = true;
-            button1.Click += button1_Click;
+            this.button1.Location = new System.Drawing.Point(15, 12);
+            this.button1.Margin = new System.Windows.Forms.Padding(2, 1, 2, 1);
+            this.button1.Name = "button1";
+            this.button1.Size = new System.Drawing.Size(93, 22);
+            this.button1.TabIndex = 0;
+            this.button1.Text = "查看所有文件";
+            this.button1.UseVisualStyleBackColor = true;
+            this.button1.Click += new System.EventHandler(this.button1_Click);
             // 
             // listBox1
             // 
-            listBox1.FormattingEnabled = true;
-            listBox1.ItemHeight = 31;
-            listBox1.Location = new Point(30, 104);
-            listBox1.Name = "listBox1";
-            listBox1.Size = new Size(376, 190);
-            listBox1.TabIndex = 1;
-            listBox1.SelectedIndexChanged += listBox1_SelectedIndexChanged;
+            this.listBox1.FormattingEnabled = true;
+            this.listBox1.ItemHeight = 15;
+            this.listBox1.Location = new System.Drawing.Point(15, 50);
+            this.listBox1.Margin = new System.Windows.Forms.Padding(2, 1, 2, 1);
+            this.listBox1.Name = "listBox1";
+            this.listBox1.Size = new System.Drawing.Size(190, 94);
+            this.listBox1.TabIndex = 1;
             // 
             // button2
             // 
-            button2.Location = new Point(459, 176);
-            button2.Name = "button2";
-            button2.Size = new Size(150, 46);
-            button2.TabIndex = 2;
-            button2.Text = "授权";
-            button2.UseVisualStyleBackColor = true;
-            button2.Click += button2_Click;
+            this.button2.Location = new System.Drawing.Point(230, 85);
+            this.button2.Margin = new System.Windows.Forms.Padding(2, 1, 2, 1);
+            this.button2.Name = "button2";
+            this.button2.Size = new System.Drawing.Size(75, 22);
+            this.button2.TabIndex = 2;
+            this.button2.Text = "授权";
+            this.button2.UseVisualStyleBackColor = true;
+            this.button2.Click += new System.EventHandler(this.button2_Click);
             // 
             // listBox2
             // 
-            listBox2.FormattingEnabled = true;
-            listBox2.ItemHeight = 31;
-            listBox2.Location = new Point(673, 104);
-            listBox2.Name = "listBox2";
-            listBox2.Size = new Size(378, 190);
-            listBox2.TabIndex = 3;
+            this.listBox2.FormattingEnabled = true;
+            this.listBox2.ItemHeight = 15;
+            this.listBox2.Location = new System.Drawing.Point(336, 50);
+            this.listBox2.Margin = new System.Windows.Forms.Padding(2, 1, 2, 1);
+            this.listBox2.Name = "listBox2";
+            this.listBox2.Size = new System.Drawing.Size(191, 94);
+            this.listBox2.TabIndex = 3;
+            this.listBox2.SelectedIndexChanged += new System.EventHandler(this.listBox2_SelectedIndexChanged);
             // 
             // button3
             // 
-            button3.Location = new Point(673, 24);
-            button3.Name = "button3";
-            button3.Size = new Size(177, 46);
-            button3.TabIndex = 4;
-            button3.Text = "查看可用文件";
-            button3.UseVisualStyleBackColor = true;
-            button3.Click += button3_Click;
+            this.button3.Location = new System.Drawing.Point(336, 12);
+            this.button3.Margin = new System.Windows.Forms.Padding(2, 1, 2, 1);
+            this.button3.Name = "button3";
+            this.button3.Size = new System.Drawing.Size(88, 22);
+            this.button3.TabIndex = 4;
+            this.button3.Text = "查看可用文件";
+            this.button3.UseVisualStyleBackColor = true;
+            this.button3.Click += new System.EventHandler(this.button3_Click);
             // 
             // server_w
             // 
-            AutoScaleDimensions = new SizeF(14F, 31F);
-            AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(1197, 649);
-            Controls.Add(button3);
-            Controls.Add(listBox2);
-            Controls.Add(button2);
-            Controls.Add(listBox1);
-            Controls.Add(button1);
-            Name = "server_w";
-            Text = "Server_w";
-            ResumeLayout(false);
+            this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
+            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
+            this.ClientSize = new System.Drawing.Size(598, 314);
+            this.Controls.Add(this.button3);
+            this.Controls.Add(this.listBox2);
+            this.Controls.Add(this.button2);
+            this.Controls.Add(this.listBox1);
+            this.Controls.Add(this.button1);
+            this.Margin = new System.Windows.Forms.Padding(2, 1, 2, 1);
+            this.Name = "server_w";
+            this.Text = "Server_w";
+            this.ResumeLayout(false);
+
         }
 
         #endregion

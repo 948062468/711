@@ -28,87 +28,94 @@
         /// </summary>
         private void InitializeComponent()
         {
-            button1 = new Button();
-            listBox1 = new ListBox();
-            label1 = new Label();
-            label2 = new Label();
-            textBox1 = new TextBox();
-            button2 = new Button();
-            SuspendLayout();
+            this.button1 = new System.Windows.Forms.Button();
+            this.listBox1 = new System.Windows.Forms.ListBox();
+            this.label1 = new System.Windows.Forms.Label();
+            this.label2 = new System.Windows.Forms.Label();
+            this.textBox1 = new System.Windows.Forms.TextBox();
+            this.button2 = new System.Windows.Forms.Button();
+            this.SuspendLayout();
             // 
             // button1
             // 
-            button1.Location = new Point(317, 307);
-            button1.Name = "button1";
-            button1.Size = new Size(150, 46);
-            button1.TabIndex = 0;
-            button1.Text = "清空";
-            button1.UseVisualStyleBackColor = true;
-            button1.Click += button1_Click;
+            this.button1.Location = new System.Drawing.Point(158, 149);
+            this.button1.Margin = new System.Windows.Forms.Padding(2, 1, 2, 1);
+            this.button1.Name = "button1";
+            this.button1.Size = new System.Drawing.Size(75, 22);
+            this.button1.TabIndex = 0;
+            this.button1.Text = "清空";
+            this.button1.UseVisualStyleBackColor = true;
+            this.button1.Click += new System.EventHandler(this.button1_Click);
             // 
             // listBox1
             // 
-            listBox1.FormattingEnabled = true;
-            listBox1.ItemHeight = 31;
-            listBox1.Location = new Point(59, 87);
-            listBox1.Name = "listBox1";
-            listBox1.ScrollAlwaysVisible = true;
-            listBox1.Size = new Size(408, 190);
-            listBox1.TabIndex = 1;
-            listBox1.SelectedIndexChanged += listBox1_SelectedIndexChanged;
+            this.listBox1.FormattingEnabled = true;
+            this.listBox1.ItemHeight = 15;
+            this.listBox1.Location = new System.Drawing.Point(30, 42);
+            this.listBox1.Margin = new System.Windows.Forms.Padding(2, 1, 2, 1);
+            this.listBox1.Name = "listBox1";
+            this.listBox1.ScrollAlwaysVisible = true;
+            this.listBox1.Size = new System.Drawing.Size(206, 94);
+            this.listBox1.TabIndex = 1;
             // 
             // label1
             // 
-            label1.AutoSize = true;
-            label1.Location = new Point(59, 39);
-            label1.Name = "label1";
-            label1.Size = new Size(134, 31);
-            label1.TabIndex = 2;
-            label1.Text = "已缓存文件";
+            this.label1.AutoSize = true;
+            this.label1.Location = new System.Drawing.Point(30, 19);
+            this.label1.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
+            this.label1.Name = "label1";
+            this.label1.Size = new System.Drawing.Size(68, 15);
+            this.label1.TabIndex = 2;
+            this.label1.Text = "已缓存文件";
             // 
             // label2
             // 
-            label2.AutoSize = true;
-            label2.Location = new Point(572, 39);
-            label2.Name = "label2";
-            label2.Size = new Size(62, 31);
-            label2.TabIndex = 3;
-            label2.Text = "日志";
+            this.label2.AutoSize = true;
+            this.label2.Location = new System.Drawing.Point(286, 19);
+            this.label2.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
+            this.label2.Name = "label2";
+            this.label2.Size = new System.Drawing.Size(31, 15);
+            this.label2.TabIndex = 3;
+            this.label2.Text = "日志";
             // 
             // textBox1
             // 
-            textBox1.Location = new Point(581, 87);
-            textBox1.Multiline = true;
-            textBox1.Name = "textBox1";
-            textBox1.ScrollBars = ScrollBars.Vertical;
-            textBox1.Size = new Size(695, 404);
-            textBox1.TabIndex = 4;
+            this.textBox1.Location = new System.Drawing.Point(290, 42);
+            this.textBox1.Margin = new System.Windows.Forms.Padding(2, 1, 2, 1);
+            this.textBox1.Multiline = true;
+            this.textBox1.Name = "textBox1";
+            this.textBox1.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
+            this.textBox1.Size = new System.Drawing.Size(350, 198);
+            this.textBox1.TabIndex = 4;
             // 
             // button2
             // 
-            button2.Location = new Point(1126, 515);
-            button2.Name = "button2";
-            button2.Size = new Size(150, 46);
-            button2.TabIndex = 5;
-            button2.Text = "清除日志";
-            button2.UseVisualStyleBackColor = true;
-            button2.Click += button2_Click;
+            this.button2.Location = new System.Drawing.Point(563, 249);
+            this.button2.Margin = new System.Windows.Forms.Padding(2, 1, 2, 1);
+            this.button2.Name = "button2";
+            this.button2.Size = new System.Drawing.Size(75, 22);
+            this.button2.TabIndex = 5;
+            this.button2.Text = "清除日志";
+            this.button2.UseVisualStyleBackColor = true;
+            this.button2.Click += new System.EventHandler(this.button2_Click);
             // 
             // Cache_w
             // 
-            AutoScaleDimensions = new SizeF(14F, 31F);
-            AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(1334, 596);
-            Controls.Add(button2);
-            Controls.Add(textBox1);
-            Controls.Add(label2);
-            Controls.Add(label1);
-            Controls.Add(listBox1);
-            Controls.Add(button1);
-            Name = "Cache_w";
-            Text = "Cache_w";
-            ResumeLayout(false);
-            PerformLayout();
+            this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
+            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
+            this.ClientSize = new System.Drawing.Size(667, 288);
+            this.Controls.Add(this.button2);
+            this.Controls.Add(this.textBox1);
+            this.Controls.Add(this.label2);
+            this.Controls.Add(this.label1);
+            this.Controls.Add(this.listBox1);
+            this.Controls.Add(this.button1);
+            this.Margin = new System.Windows.Forms.Padding(2, 1, 2, 1);
+            this.Name = "Cache_w";
+            this.Text = "Cache_w";
+            this.ResumeLayout(false);
+            this.PerformLayout();
+
         }
 
         #endregion

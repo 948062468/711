@@ -173,7 +173,6 @@ namespace Cache
                                             if (bytesRead < buffer.Length) break;
                                         }
                                     }
-
                                     WriteLog($"User request: File \"{fileName}\"");
                                     WriteLog($"Response: File \"{fileName}\" downloaded from the server");
                                 }
