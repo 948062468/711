@@ -5,6 +5,10 @@ using System.Net.Sockets;
 using System.Text;
 using System.Windows.Forms;
 using System.Security.Cryptography;
+using System.Security.Policy;
+using System.Text.RegularExpressions;
+using System.Linq;
+
 
 namespace Server
 {
@@ -101,7 +105,14 @@ namespace Server
             }
         }
 
-
+        void WriteToLogFile(string message)
+        {
+            string logFilePath = "../../../debug_log.txt";
+            using (StreamWriter logFile = new StreamWriter(logFilePath, true))
+            {
+                logFile.WriteLine($"{DateTime.Now}: {message}");
+            }
+        }
 
         private void StartServer()
         {
@@ -153,20 +164,21 @@ namespace Server
                         // 读取 cache_hash.txt 中的哈希值
                         string cacheHashPath = "../../../cache_hash.txt";
                         HashSet<string> cacheHashes = new HashSet<string>();
+
                         if (File.Exists(cacheHashPath))
                         {
-                            using (StreamReader sr = new StreamReader(cacheHashPath))
+                            foreach (var line in File.ReadLines(cacheHashPath))
                             {
-                                string line;
-                                while ((line = sr.ReadLine()) != null)
-                                {
-                                    cacheHashes.Add(line);
-                                }
+                                cacheHashes.Add(line);
                             }
                         }
 
+                        List<FileInfo> sortedChunkFiles = chunksDirectory.GetFiles()
+                            .OrderBy(f => int.Parse(Regex.Match(f.Name, @"(\d+)\.chunk").Groups[1].Value))
+                            .ToList();
+
                         // 遍历碎片文件夹
-                        foreach (FileInfo chunkFile in chunksDirectory.GetFiles())
+                        foreach (FileInfo chunkFile in sortedChunkFiles)
                         {
                             byte[] chunkData = File.ReadAllBytes(chunkFile.FullName);
                             byte[] hashData = CalculateSHA256(chunkData);
@@ -175,19 +187,36 @@ namespace Server
                             if (cacheHashes.Contains(hashString))
                             {
                                 // 告诉请求者哈希值
-                                writer.WriteLine("0"); // 操作码 0
-                                writer.WriteLine(hashString);
+                                int operationCode = 0;
+                                byte[] operationCodeBytes = BitConverter.GetBytes(operationCode);
+                                stream.Write(operationCodeBytes, 0, operationCodeBytes.Length);
+                                stream.Flush();
+
+                                byte[] hashBytes = Encoding.UTF8.GetBytes(hashString);
+                                stream.Write(hashBytes, 0, hashBytes.Length);
+                                stream.Flush();
                             }
                             else
                             {
                                 // 发送操作码 1 和 chunk 长度
-                                writer.WriteLine("1"); // 操作码 1
-                                writer.WriteLine(chunkData.Length);
+                                int operationCode = 1;
+                                byte[] operationCodeBytes = BitConverter.GetBytes(operationCode);
+                                stream.Write(operationCodeBytes, 0, operationCodeBytes.Length);
+                                WriteToLogFile($"Sending operation code: {operationCodeBytes}");
+                                stream.Flush();
+
+                                byte[] chunkLengthBytes = BitConverter.GetBytes(chunkData.Length);
+                                stream.Write(chunkLengthBytes, 0, chunkLengthBytes.Length);
+                                stream.Flush();
 
                                 // 发送碎片块给请求者
-                                writer.WriteLine(hashString);
-                                writer.Flush(); // 确保 hashString 已经发送
+                                byte[] hashBytes = Encoding.UTF8.GetBytes(hashString);
+                                stream.Write(hashBytes, 0, hashBytes.Length);
+                                WriteToLogFile($"Sending hash: {hashBytes}");
+                                stream.Flush();
+
                                 stream.Write(chunkData, 0, chunkData.Length);
+                                WriteToLogFile($"Sending chunk data of length: {chunkData.Length}");
                                 stream.Flush(); // 确保 chunkData 已经发送
 
 

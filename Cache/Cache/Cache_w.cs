@@ -161,7 +161,32 @@ namespace Cache
             using (StreamWriter cacheWriter = new StreamWriter(cacheStream, Encoding.UTF8))
             {
                 string command = cacheReader.ReadLine();
-                if (command == "REQUEST_FILE")
+                if (command == "LIST_FILES")
+                {
+                    using (TcpClient serverClient = new TcpClient())
+                    {
+                        serverClient.Connect(ServerAddress, ServerPort);
+                        using (NetworkStream serverStream = serverClient.GetStream())
+                        using (StreamReader serverReader = new StreamReader(serverStream, Encoding.UTF8))
+                        using (StreamWriter serverWriter = new StreamWriter(serverStream, Encoding.UTF8))
+                        {
+                            serverWriter.WriteLine("LIST_FILES");
+                            serverWriter.Flush();
+
+                            int fileCount = int.Parse(serverReader.ReadLine());
+                            cacheWriter.WriteLine(fileCount);
+                            cacheWriter.Flush();
+
+                            for (int i = 0; i < fileCount; i++)
+                            {
+                                string fileName = serverReader.ReadLine();
+                                cacheWriter.WriteLine(fileName);
+                                cacheWriter.Flush();
+                            }
+                        }
+                    }
+                }
+                else if (command == "REQUEST_FILE")
                 {
                     string fileName = cacheReader.ReadLine();
                     string tempFolderPath = Path.Combine("../../../temp");
@@ -184,16 +209,27 @@ namespace Cache
                             string response = serverReader.ReadLine().Trim();
                             if (response == "FILE_FOUND")
                             {
-                                int chunkCount = int.Parse(serverReader.ReadLine());
+                                // 读取 chunk 数量
+                                byte[] chunkCountBytes = new byte[4];
+                                serverStream.Read(chunkCountBytes, 0, chunkCountBytes.Length);
+                                int chunkCount = BitConverter.ToInt32(chunkCountBytes, 0);
 
                                 for (int i = 1; i <= chunkCount; i++)
                                 {
-                                    int operationCode = int.Parse(serverReader.ReadLine());
+                                    byte[] operationCodeBytes = new byte[4];
+                                    serverStream.Read(operationCodeBytes, 0, operationCodeBytes.Length);
+                                    int operationCode = BitConverter.ToInt32(operationCodeBytes, 0);
 
                                     if (operationCode == 1) // 完整的 chunk
                                     {
-                                        int chunkLength = int.Parse(serverReader.ReadLine());
-                                        string hash = serverReader.ReadLine();
+                                        byte[] chunkLengthBytes = new byte[4];
+                                        serverStream.Read(chunkLengthBytes, 0, chunkLengthBytes.Length);
+                                        int chunkLength = BitConverter.ToInt32(chunkLengthBytes, 0);
+
+                                        // 读取哈希值
+                                        byte[] hashBytes = new byte[64];
+                                        serverStream.Read(hashBytes, 0, hashBytes.Length);
+                                        string hash = Encoding.UTF8.GetString(hashBytes);
 
                                         byte[] chunkData = new byte[chunkLength];
                                         int bytesRead = 0;
@@ -216,7 +252,11 @@ namespace Cache
                                     }
                                     else if (operationCode == 0) // 哈希值
                                     {
-                                        string hash = serverReader.ReadLine();
+                                        // 读取哈希值
+                                        byte[] hashBytes = new byte[64];
+                                        serverStream.Read(hashBytes, 0, hashBytes.Length);
+                                        string hash = Encoding.UTF8.GetString(hashBytes);
+
                                         string cacheChunkFilePath = Path.Combine(cacheChunksFolderPath, $"{hash}.dat");
 
                                         if (File.Exists(cacheChunkFilePath))
@@ -240,6 +280,12 @@ namespace Cache
 
                                 // 循环结束后处理临时文件夹中的文件
                                 byte[] reconstructedFile = ReassembleFileFromChunks(tempFolderPath);
+
+                                DirectoryInfo directory = new DirectoryInfo(tempFolderPath);
+                                foreach (FileInfo file in directory.GetFiles())
+                                {
+                                    file.Delete();
+                                }
 
                                 // 将拼接后的文件发送给客户端
                                 cacheWriter.WriteLine("FILE_FOUND");

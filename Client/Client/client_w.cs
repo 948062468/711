@@ -8,8 +8,6 @@ namespace Client
 {
     public partial class client_w : Form
     {
-        private const string ServerAddress = "127.0.0.1";
-        private const int ServerPort = 8082;
 
         public client_w()
         {
@@ -22,20 +20,20 @@ namespace Client
             listBox1.Items.Clear();
             try
             {
-                using (TcpClient client = new TcpClient())
+                using (TcpClient cacheClient = new TcpClient())
                 {
-                    client.Connect(ServerAddress, ServerPort);
-                    using (NetworkStream stream = client.GetStream())
-                    using (StreamReader reader = new StreamReader(stream, Encoding.UTF8))
-                    using (StreamWriter writer = new StreamWriter(stream, Encoding.UTF8))
+                    cacheClient.Connect("127.0.0.1", 8081);
+                    using (NetworkStream cacheStream = cacheClient.GetStream())
+                    using (StreamReader cacheReader = new StreamReader(cacheStream, Encoding.UTF8))
+                    using (StreamWriter cacheWriter = new StreamWriter(cacheStream, Encoding.UTF8))
                     {
-                        writer.WriteLine("LIST_FILES");
-                        writer.Flush();
+                        cacheWriter.WriteLine("LIST_FILES");
+                        cacheWriter.Flush();
 
-                        int fileCount = int.Parse(reader.ReadLine());
+                        int fileCount = int.Parse(cacheReader.ReadLine());
                         for (int i = 0; i < fileCount; i++)
                         {
-                            listBox1.Items.Add(reader.ReadLine());
+                            listBox1.Items.Add(cacheReader.ReadLine());
                         }
                     }
                 }
@@ -45,6 +43,7 @@ namespace Client
                 MessageBox.Show($"Error: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
+
 
         private void button2_Click(object sender, EventArgs e)
         {
