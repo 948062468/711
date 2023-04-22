@@ -1,4 +1,4 @@
-using System;
+ï»¿using System;
 using System.IO;
 using System.Net.Sockets;
 using System.Text;
@@ -60,7 +60,7 @@ namespace Client
             }
             else
             {
-                MessageBox.Show("ÇëÏÈ´ÓÎÄ¼þÁÐ±íÖÐÑ¡ÔñÒ»¸öÎÄ¼þ¡£", "ÌáÊ¾", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("Ã‡Ã«ÃÃˆÂ´Ã“ÃŽÃ„Â¼Ã¾ÃÃÂ±Ã­Ã–ÃÃ‘Â¡Ã”Ã±Ã’Â»Â¸Ã¶ÃŽÃ„Â¼Ã¾Â¡Â£", "ÃŒÃ¡ÃŠÂ¾", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
 
@@ -82,13 +82,22 @@ namespace Client
                         string response = cacheReader.ReadLine();
                         if (response == "FILE_FOUND")
                         {
-                            // ÕâÀï¿ÉÒÔ½«ÎÄ¼þÄÚÈÝÏÔÊ¾µ½Ò»¸öÎÄ±¾¿ò»òÆäËû¿Ø¼þÖÐ
-                            string fileContent = cacheReader.ReadToEnd();
-                            MessageBox.Show(fileContent, "ÎÄ¼þÄÚÈÝ", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                            MemoryStream imageMemoryStream = new MemoryStream();
+                            byte[] buffer = new byte[4096];
+                            int bytesRead;
+
+                            while ((bytesRead = cacheStream.Read(buffer, 0, buffer.Length)) > 0)
+                            {
+                                imageMemoryStream.Write(buffer, 0, bytesRead);
+                                if (bytesRead < buffer.Length) break;
+                            }
+
+                            Image image = Image.FromStream(imageMemoryStream);
+                            pictureBox1.Image = image;
                         }
                         else
                         {
-                            MessageBox.Show("ÎÄ¼þÎ´ÕÒµ½¡£", "ÌáÊ¾", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            MessageBox.Show("æ–‡ä»¶æœªæ‰¾åˆ°ã€‚", "æç¤º", MessageBoxButtons.OK, MessageBoxIcon.Error);
                         }
                     }
                 }
@@ -99,11 +108,15 @@ namespace Client
             }
         }
 
+
         private void listBox1_SelectedIndexChanged(object sender, EventArgs e)
         {
 
         }
 
-       
+        private void pictureBox1_Click(object sender, EventArgs e)
+        {
+
+        }
     }
 }

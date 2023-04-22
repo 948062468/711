@@ -146,8 +146,9 @@ namespace Server
 
                         // 计算并发送 chunk 数量
                         int chunkCount = chunksDirectory.GetFiles().Length;
-                        writer.WriteLine(chunkCount);
-                        writer.Flush();
+                        byte[] chunkCountBytes = BitConverter.GetBytes(chunkCount);
+                        stream.Write(chunkCountBytes, 0, chunkCountBytes.Length);
+                        stream.Flush();
 
                         // 读取 cache_hash.txt 中的哈希值
                         string cacheHashPath = "../../../cache_hash.txt";
@@ -185,7 +186,10 @@ namespace Server
 
                                 // 发送碎片块给请求者
                                 writer.WriteLine(hashString);
+                                writer.Flush(); // 确保 hashString 已经发送
                                 stream.Write(chunkData, 0, chunkData.Length);
+                                stream.Flush(); // 确保 chunkData 已经发送
+
 
                                 // 将新的哈希值记录到 cache_hash.txt 中
                                 using (StreamWriter sw = File.AppendText(cacheHashPath))
@@ -200,8 +204,8 @@ namespace Server
                         }
 
                         // 发送结束信号
-                        //writer.WriteLine("END_OF_FILE");
-                        //writer.Flush();
+                        writer.WriteLine("END_OF_FILE");
+                        writer.Flush();
                     }
                     else
                     {

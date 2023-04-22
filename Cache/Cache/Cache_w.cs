@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
@@ -130,6 +130,27 @@ namespace Cache
             _listener.BeginAcceptTcpClient(ClientConnected, null);
         }
 
+        private static byte[] ReassembleFileFromChunks(string chunksFolderPath)
+        {
+            MemoryStream reconstructedFile = new MemoryStream();
+            string[] chunkFiles = Directory.GetFiles(chunksFolderPath, "chunk_*.dat");
+
+            Array.Sort(chunkFiles, (file1, file2) =>
+            {
+                int chunkNumber1 = int.Parse(Path.GetFileNameWithoutExtension(file1).Split('_')[1]);
+                int chunkNumber2 = int.Parse(Path.GetFileNameWithoutExtension(file2).Split('_')[1]);
+                return chunkNumber1.CompareTo(chunkNumber2);
+            });
+
+            foreach (string chunkFile in chunkFiles)
+            {
+                byte[] chunkData = File.ReadAllBytes(chunkFile);
+                reconstructedFile.Write(chunkData, 0, chunkData.Length);
+            }
+
+            return reconstructedFile.ToArray();
+        }
+
         private void ClientConnected(IAsyncResult ar)
         {
             TcpClient cacheClient = _listener.EndAcceptTcpClient(ar);
@@ -143,71 +164,114 @@ namespace Cache
                 if (command == "REQUEST_FILE")
                 {
                     string fileName = cacheReader.ReadLine();
-                    string cacheFilePath = Path.Combine(CacheFolderPath, fileName);
+                    string tempFolderPath = Path.Combine("../../../temp");
+                    string cacheChunksFolderPath = Path.Combine("../../../cache_chunks");
 
-                    if (!File.Exists(cacheFilePath))
+                    Directory.CreateDirectory(tempFolderPath);
+                    Directory.CreateDirectory(cacheChunksFolderPath);
+
+                    using (TcpClient serverClient = new TcpClient())
                     {
-                        using (TcpClient serverClient = new TcpClient())
+                        serverClient.Connect(ServerAddress, ServerPort);
+                        using (NetworkStream serverStream = serverClient.GetStream())
+                        using (StreamReader serverReader = new StreamReader(serverStream, Encoding.UTF8))
+                        using (StreamWriter serverWriter = new StreamWriter(serverStream, Encoding.UTF8))
                         {
-                            serverClient.Connect(ServerAddress, ServerPort);
-                            using (NetworkStream serverStream = serverClient.GetStream())
-                            using (StreamReader serverReader = new StreamReader(serverStream, Encoding.UTF8))
-                            using (StreamWriter serverWriter = new StreamWriter(serverStream, Encoding.UTF8))
+                            serverWriter.WriteLine("SEND_FILE");
+                            serverWriter.WriteLine(fileName);
+                            serverWriter.Flush();
+
+                            string response = serverReader.ReadLine().Trim();
+                            if (response == "FILE_FOUND")
                             {
-                                serverWriter.WriteLine("SEND_FILE");
-                                serverWriter.WriteLine(fileName);
-                                serverWriter.Flush();
+                                int chunkCount = int.Parse(serverReader.ReadLine());
 
-                                string response = serverReader.ReadLine();
-                                if (response == "FILE_FOUND")
+                                for (int i = 1; i <= chunkCount; i++)
                                 {
-                                    Directory.CreateDirectory(CacheFolderPath);
-                                    using (FileStream fileStream = File.Create(cacheFilePath))
-                                    {
-                                        byte[] buffer = new byte[4096];
-                                        int bytesRead;
+                                    int operationCode = int.Parse(serverReader.ReadLine());
 
-                                        while ((bytesRead = serverStream.Read(buffer, 0, buffer.Length)) > 0)
+                                    if (operationCode == 1) // 完整的 chunk
+                                    {
+                                        int chunkLength = int.Parse(serverReader.ReadLine());
+                                        string hash = serverReader.ReadLine();
+
+                                        byte[] chunkData = new byte[chunkLength];
+                                        int bytesRead = 0;
+                                        int remainingBytes = chunkLength;
+
+                                        while (remainingBytes > 0)
                                         {
-                                            fileStream.Write(buffer, 0, bytesRead);
-                                            if (bytesRead < buffer.Length) break;
+                                            int readBytes = serverStream.Read(chunkData, bytesRead, remainingBytes);
+                                            bytesRead += readBytes;
+                                            remainingBytes -= readBytes;
+                                        }
+
+                                        // 存储到临时文件夹
+                                        string tempFilePath = Path.Combine(tempFolderPath, $"chunk_{i}.dat");
+                                        File.WriteAllBytes(tempFilePath, chunkData);
+
+                                        // 存储到 cache_chunks 文件夹
+                                        string cacheChunkFilePath = Path.Combine(cacheChunksFolderPath, $"{hash}.dat");
+                                        File.WriteAllBytes(cacheChunkFilePath, chunkData);
+                                    }
+                                    else if (operationCode == 0) // 哈希值
+                                    {
+                                        string hash = serverReader.ReadLine();
+                                        string cacheChunkFilePath = Path.Combine(cacheChunksFolderPath, $"{hash}.dat");
+
+                                        if (File.Exists(cacheChunkFilePath))
+                                        {
+                                            // 拷贝到临时文件夹
+                                            string tempFilePath = Path.Combine(tempFolderPath, $"chunk_{i}.dat");
+                                            File.Copy(cacheChunkFilePath, tempFilePath);
+                                        }
+                                        else
+                                        {
+                                            // 处理找不到哈希值对应的文件的情况（可以向客户端发送错误消息或中断连接）
+                                            cacheWriter.WriteLine("ERROR");
+                                            cacheWriter.WriteLine("出错：找不到哈希值对应的文件");
+                                            cacheWriter.Flush();
+
+                                            // 终止传输
+                                            break;
                                         }
                                     }
-                                    WriteLog($"User request: File \"{fileName}\"");
-                                    WriteLog($"Response: File \"{fileName}\" downloaded from the server");
                                 }
+
+                                // 循环结束后处理临时文件夹中的文件
+                                byte[] reconstructedFile = ReassembleFileFromChunks(tempFolderPath);
+
+                                // 将拼接后的文件发送给客户端
+                                cacheWriter.WriteLine("FILE_FOUND");
+                                cacheWriter.Flush();
+
+                                // 添加一个换行符以便客户端正确读取文件数据
+                                cacheWriter.WriteLine();
+                                cacheWriter.Flush();
+
+
+                                using (MemoryStream ms = new MemoryStream(reconstructedFile))
+                                {
+                                    byte[] buffer = new byte[4096];
+                                    int bytesRead;
+
+                                    while ((bytesRead = ms.Read(buffer, 0, buffer.Length)) > 0)
+                                    {
+                                        cacheStream.Write(buffer, 0, bytesRead);
+                                        if (bytesRead < buffer.Length) break;
+                                    }
+                                }
+
                             }
-                        }
-                    }
-
-                    if (File.Exists(cacheFilePath))
-                    {
-                        cacheWriter.WriteLine("FILE_FOUND");
-                        cacheWriter.Flush();
-
-                        using (FileStream fileStream = File.OpenRead(cacheFilePath))
-                        {
-                            byte[] buffer = new byte[4096];
-                            int bytesRead;
-
-                            while ((bytesRead = fileStream.Read(buffer, 0, buffer.Length)) > 0)
+                            else
                             {
-                                cacheStream.Write(buffer, 0, bytesRead);
-                                if (bytesRead < buffer.Length) break;
+                                cacheWriter.WriteLine("FILE_NOT_FOUND");
+                                cacheWriter.Flush();
                             }
                         }
-
-                        WriteLog($"User request: File \"{fileName}\"");
-                        WriteLog($"Response: Cache file \"{fileName}\"");
-
-                        UpdateCacheFileList?.Invoke();
-                    }
-                    else
-                    {
-                        cacheWriter.WriteLine("FILE_NOT_FOUND");
-                        cacheWriter.Flush();
                     }
                 }
+
             }
         }
     }
