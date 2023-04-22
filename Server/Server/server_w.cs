@@ -40,10 +40,10 @@ namespace Server
 
                 // 对图片文件进行可变大小的切割
                 byte[] fileData = File.ReadAllBytes(file);
-                List<byte[]> chunks = SplitFileIntoChunks(fileData); // 这是一个需要实现的方法，可以使用滚动哈希实现
+                List<byte[]> chunks = SplitFileIntoChunks(fileData); // 使用滚动哈希实现
 
                 // 将切割得到的数据块存储在 filename_chunk 文件夹中
-                int chunkIndex = 0;
+                int chunkIndex = 1;
                 foreach (var chunk in chunks)
                 {
                     string chunkFilePath = Path.Combine(chunkFolder, chunkIndex.ToString() + ".chunk");
@@ -54,14 +54,13 @@ namespace Server
         }
 
         // 实现此方法以使用滚动哈希将文件分割成可变大小的块
-        private List<byte[]> SplitFileIntoChunks(byte[] fileData)
+        private static List<byte[]> SplitFileIntoChunks(byte[] fileData)
         {
             List<byte[]> chunks = new List<byte[]>();
-            int fixedLength = 48;
+            int fixedLength = 3;
             MemoryStream currentChunk = new MemoryStream();
 
-            int i = 0;
-            for (; i < fileData.Length - fixedLength + 1; i++)
+            for (int i = 0; i < fileData.Length - fixedLength + 1; i++)
             {
                 byte[] tempData = new byte[fixedLength];
                 Array.Copy(fileData, i, tempData, 0, fixedLength);
@@ -82,19 +81,19 @@ namespace Server
             }
 
             // 将剩余的数据添加到最后一个块
-            for (; i < fileData.Length; i++)
+            for (int i = fileData.Length - fixedLength + 1; i < fileData.Length; i++)
             {
-                currentChunk.WriteByte(fileData[i]);
+                if (i < fileData.Length)
+                {
+                    currentChunk.WriteByte(fileData[i]);
+                }
             }
             chunks.Add(currentChunk.ToArray());
 
             return chunks;
         }
 
-
-
-
-        private byte[] CalculateSHA256(byte[] data)
+        private static byte[] CalculateSHA256(byte[] data)
         {
             using (SHA256 sha256 = SHA256.Create())
             {
@@ -145,6 +144,11 @@ namespace Server
                         string chunksFolderPath = Path.Combine("../../../chunks", requestedFile + "_chunk");
                         DirectoryInfo chunksDirectory = new DirectoryInfo(chunksFolderPath);
 
+                        // 计算并发送 chunk 数量
+                        int chunkCount = chunksDirectory.GetFiles().Length;
+                        writer.WriteLine(chunkCount);
+                        writer.Flush();
+
                         // 读取 cache_hash.txt 中的哈希值
                         string cacheHashPath = "../../../cache_hash.txt";
                         HashSet<string> cacheHashes = new HashSet<string>();
@@ -170,12 +174,17 @@ namespace Server
                             if (cacheHashes.Contains(hashString))
                             {
                                 // 告诉请求者哈希值
-                                writer.WriteLine("HASH:" + hashString);
+                                writer.WriteLine("0"); // 操作码 0
+                                writer.WriteLine(hashString);
                             }
                             else
                             {
+                                // 发送操作码 1 和 chunk 长度
+                                writer.WriteLine("1"); // 操作码 1
+                                writer.WriteLine(chunkData.Length);
+
                                 // 发送碎片块给请求者
-                                writer.WriteLine("CHUNK:" + hashString);
+                                writer.WriteLine(hashString);
                                 stream.Write(chunkData, 0, chunkData.Length);
 
                                 // 将新的哈希值记录到 cache_hash.txt 中
@@ -191,8 +200,8 @@ namespace Server
                         }
 
                         // 发送结束信号
-                        writer.WriteLine("END_OF_FILE");
-                        writer.Flush();
+                        //writer.WriteLine("END_OF_FILE");
+                        //writer.Flush();
                     }
                     else
                     {
