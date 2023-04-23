@@ -24,6 +24,35 @@ namespace Server
             SplitAllFilesIntoChunks();
         }
 
+        private void SliceFile(string filePath)
+        {
+            string fileName = Path.GetFileName(filePath);
+
+            // 创建名为 filename_chunk 的文件夹
+            string chunkFolder = Path.Combine("../../../chunks", fileName + "_chunk");
+
+            // 如果文件夹已经存在，删除原有文件夹并创建新的文件夹
+            if (Directory.Exists(chunkFolder))
+            {
+                Directory.Delete(chunkFolder, true);
+            }
+            Directory.CreateDirectory(chunkFolder);
+
+            // 对图片文件进行可变大小的切割
+            byte[] fileData = File.ReadAllBytes(filePath);
+            List<byte[]> chunks = SplitFileIntoChunks(fileData); // 使用滚动哈希实现
+
+            // 将切割得到的数据块存储在 filename_chunk 文件夹中
+            int chunkIndex = 1;
+            foreach (var chunk in chunks)
+            {
+                string chunkFilePath = Path.Combine(chunkFolder, chunkIndex.ToString() + ".chunk");
+                File.WriteAllBytes(chunkFilePath, chunk);
+                chunkIndex++;
+            }
+        }
+
+
         private void SplitAllFilesIntoChunks()
         {
             var files = Directory.GetFiles("../../../all_files");
@@ -248,6 +277,12 @@ namespace Server
                         //文件未找到
                     }
                 }
+                else if (command == 2)
+                {
+                    // 清空 cache_hash.txt 文件
+                    string cacheHashPath = "../../../cache_hash.txt";
+                    File.WriteAllText(cacheHashPath, string.Empty);
+                }
             }
         }
 
@@ -316,5 +351,29 @@ namespace Server
 
         }
 
+        private void button4_Click(object sender, EventArgs e)
+        {
+            OpenFileDialog openFileDialog = new OpenFileDialog();
+            openFileDialog.Filter = "Image Files (*.bmp;*.jpg;*.jpeg;*.png)|*.bmp;*.jpg;*.jpeg;*.png"; // 仅允许图像文件类型
+
+            if (openFileDialog.ShowDialog() == DialogResult.OK)
+            {
+                string sourceFilePath = openFileDialog.FileName;
+                string fileName = Path.GetFileName(sourceFilePath);
+                string destinationFilePath = Path.Combine("../../../all_files", fileName);
+
+                // 将选择的文件复制到 ../../../available_files 文件夹中
+                File.Copy(sourceFilePath, destinationFilePath, true);
+
+                // 对复制的文件进行切片
+                SliceFile(destinationFilePath);
+            }
+            listBox1.Items.Clear();
+            var files = Directory.GetFiles("../../../all_files");
+            foreach (var file in files)
+            {
+                listBox1.Items.Add(Path.GetFileName(file));
+            }
+        }
     }
 }

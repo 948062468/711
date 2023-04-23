@@ -29,7 +29,7 @@ namespace Cache
             else
             {
                 listBox1.Items.Clear();
-                var files = Directory.GetFiles("../../../cache_files");
+                var files = Directory.GetFiles("../../../cache_chunks");
                 foreach (var file in files)
                 {
                     listBox1.Items.Add(Path.GetFileName(file));
@@ -83,10 +83,78 @@ namespace Cache
             }
         }
 
-        private void listBox1_SelectedIndexChanged(object sender, EventArgs e)
+        private void DisplaySelectedChunkContent()
         {
+            if (listBox1.SelectedIndex != -1)
+            {
+                string selectedChunkFileName = listBox1.SelectedItem.ToString();
+                string chunkFilePath = Path.Combine("../../../cache_chunks", selectedChunkFileName);
+
+                byte[] chunkContent = File.ReadAllBytes(chunkFilePath);
+                string hexContent = BitConverter.ToString(chunkContent).Replace("-", "");
+
+                textBox2.Clear();
+                textBox2.Text = hexContent;
+            }
         }
 
+
+        private void listBox1_SelectedIndexChanged(object sender, EventArgs e)
+        {
+  
+        }
+
+
+
+        private void textBox1_TextChanged(object sender, EventArgs e)
+        {
+
+        }
+
+        private void label2_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void button3_Click(object sender, EventArgs e)
+        {
+            DisplaySelectedChunkContent();
+        }
+
+        private void button4_Click(object sender, EventArgs e)
+        {
+            // 清空客户端缓存的 chunk 文件夹
+            string cacheChunksFolderPath = "../../../cache_chunks";
+            DirectoryInfo cacheChunksDirectory = new DirectoryInfo(cacheChunksFolderPath);
+            foreach (FileInfo file in cacheChunksDirectory.GetFiles())
+            {
+                file.Delete();
+            }
+            UpdateCacheFileList();
+
+            // 发送一个操作码，通知服务器清空 cache_hash.txt 文件
+            using (TcpClient serverClient = new TcpClient())
+            {
+                serverClient.Connect("127.0.0.1", 8082);
+                using (NetworkStream serverStream = serverClient.GetStream())
+                {
+                    byte command = 2; // 假设操作码 2 表示清空 cache_hash.txt
+                    serverStream.WriteByte(command);
+                    serverStream.Flush();
+                }
+            }
+        }
+
+
+        private void label3_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void textBox3_TextChanged(object sender, EventArgs e)
+        {
+
+        }
     }
 
     public class CacheServer
@@ -117,9 +185,9 @@ namespace Cache
         {
             string logFilePath = "../../../log.txt";
             string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
-            string logEntry = $"{timestamp}: {message}";
+            string logEntry = $"{message}";
 
-            File.AppendAllText(logFilePath, logEntry + Environment.NewLine);
+            File.AppendAllText(logFilePath, logEntry);
             _updateLogTextbox(logEntry); // Call the delegate after writing to the log file
         }
 
@@ -210,6 +278,8 @@ namespace Cache
                     cacheStream.Read(fileNameBytes, 0, fileNameLength);
                     string fileName = Encoding.UTF8.GetString(fileNameBytes);
 
+                    string logMessage = $"User request: file {fileName} at {DateTime.Now.ToString("HH:mm:ss yyyy-MM-dd")}";
+                    WriteLog(logMessage);
 
                     string tempFolderPath = Path.Combine("../../../temp");
                     string cacheChunksFolderPath = Path.Combine("../../../cache_chunks");
@@ -235,6 +305,9 @@ namespace Cache
                             byte[] chunkCountBytes = new byte[4];
                             serverStream.Read(chunkCountBytes, 0, chunkCountBytes.Length);
                             int chunkCount = BitConverter.ToInt32(chunkCountBytes, 0);
+
+                            long _cacheDataSize = 0;
+                            long _serverDataSize = 0;
 
                             for (int i = 1; i <= chunkCount; i++)
                             {
@@ -265,6 +338,10 @@ namespace Cache
                                     // 存储到 cache_chunks 文件夹
                                     string cacheChunkFilePath = Path.Combine(cacheChunksFolderPath, $"{hash}.dat");
                                     File.WriteAllBytes(cacheChunkFilePath, chunkData);
+                                    UpdateCacheFileList();
+
+                                    //_serverDataSize
+                                    _serverDataSize += chunkLength;
                                 }
                                 else if (operationCode == 0) // 哈希值
                                 {
@@ -278,8 +355,12 @@ namespace Cache
                                     // 拷贝到临时文件夹
                                     string tempFilePath = Path.Combine(tempFolderPath, $"chunk_{i}.dat");
                                     File.Copy(cacheChunkFilePath, tempFilePath);
-                                    
+
+                                    //_cacheDataSize
+                                    FileInfo fi = new FileInfo(cacheChunkFilePath);
+                                    _cacheDataSize += fi.Length; // 更新从缓存接收的数据大小
                                 }
+                                
                             }
 
                             // 循环结束后处理临时文件夹中的文件
@@ -292,6 +373,10 @@ namespace Cache
                                 fileStream.CopyTo(cacheStream);
                             }
 
+                            //计算复用率,写日志
+                            double reuseRatio = (_cacheDataSize * 100.0) / (_serverDataSize + _cacheDataSize);
+                            string logMessage2 = $"response: {reuseRatio}% of file {fileName} was constructed with the cached data";
+                            WriteLog(logMessage2);
 
                             DirectoryInfo directory = new DirectoryInfo(tempFolderPath);
                             foreach (FileInfo file in directory.GetFiles())
