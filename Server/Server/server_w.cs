@@ -128,29 +128,43 @@ namespace Server
             _listener.BeginAcceptTcpClient(ClientConnected, null);
 
             using (NetworkStream stream = client.GetStream())
-            using (StreamReader reader = new StreamReader(stream, Encoding.UTF8))
-            using (StreamWriter writer = new StreamWriter(stream, Encoding.UTF8))
             {
-                string command = reader.ReadLine();
-                if (command == "LIST_FILES")
+
+                //接收来自cache的请求
+                byte command = (byte)stream.ReadByte();
+                if (command == 0)
                 {
                     var files = Directory.GetFiles("../../../available_files");
-                    writer.WriteLine(files.Length);
+                    // 发送文件数量
+                    byte[] fileCountBytes = BitConverter.GetBytes(files.Length);
+                    stream.Write(fileCountBytes, 0, fileCountBytes.Length);
+                    stream.Flush();
+
+                    // 发送文件名
                     foreach (var file in files)
                     {
-                        writer.WriteLine(Path.GetFileName(file));
+                        byte[] fileNameBytes = Encoding.UTF8.GetBytes(Path.GetFileName(file));
+                        byte[] fileNameLengthBytes = BitConverter.GetBytes(fileNameBytes.Length);
+                        stream.Write(fileNameLengthBytes, 0, fileNameLengthBytes.Length);
+                        stream.Write(fileNameBytes, 0, fileNameBytes.Length);
+                        stream.Flush();
                     }
+
                 }
                 //处理chunk
-                else if (command == "SEND_FILE")
+                else if (command == 1)
                 {
-                    string requestedFile = reader.ReadLine();
+                    byte[] fileNameLengthBytes = new byte[4];
+                    stream.Read(fileNameLengthBytes, 0, 4);
+                    int fileNameLength = BitConverter.ToInt32(fileNameLengthBytes, 0);
+
+                    byte[] fileNameBytes = new byte[fileNameLength];
+                    stream.Read(fileNameBytes, 0, fileNameLength);
+                    string requestedFile = Encoding.UTF8.GetString(fileNameBytes);
+
                     string sourcePath = Path.Combine("../../../available_files", requestedFile);
                     if (File.Exists(sourcePath))
                     {
-                        writer.WriteLine("FILE_FOUND");
-                        writer.Flush();
-
                         // 获取碎片文件夹路径
                         string chunksFolderPath = Path.Combine("../../../chunks", requestedFile + "_chunk");
                         DirectoryInfo chunksDirectory = new DirectoryInfo(chunksFolderPath);
@@ -202,7 +216,6 @@ namespace Server
                                 int operationCode = 1;
                                 byte[] operationCodeBytes = BitConverter.GetBytes(operationCode);
                                 stream.Write(operationCodeBytes, 0, operationCodeBytes.Length);
-                                WriteToLogFile($"Sending operation code: {operationCodeBytes}");
                                 stream.Flush();
 
                                 byte[] chunkLengthBytes = BitConverter.GetBytes(chunkData.Length);
@@ -212,11 +225,9 @@ namespace Server
                                 // 发送碎片块给请求者
                                 byte[] hashBytes = Encoding.UTF8.GetBytes(hashString);
                                 stream.Write(hashBytes, 0, hashBytes.Length);
-                                WriteToLogFile($"Sending hash: {hashBytes}");
                                 stream.Flush();
 
                                 stream.Write(chunkData, 0, chunkData.Length);
-                                WriteToLogFile($"Sending chunk data of length: {chunkData.Length}");
                                 stream.Flush(); // 确保 chunkData 已经发送
 
 
@@ -229,50 +240,14 @@ namespace Server
                                 // 将新的哈希值添加到 HashSet 中
                                 cacheHashes.Add(hashString);
                             }
-                            writer.Flush();
                         }
-
                         // 发送结束信号
-                        writer.WriteLine("END_OF_FILE");
-                        writer.Flush();
                     }
                     else
                     {
-                        writer.WriteLine("FILE_NOT_FOUND");
-                        writer.Flush();
+                        //文件未找到
                     }
                 }
-
-
-                /*原本传输整个文件
-                else if (command == "SEND_FILE")
-                {
-                    string requestedFile = reader.ReadLine();
-                    string sourcePath = Path.Combine("../../../available_files", requestedFile);
-                    if (File.Exists(sourcePath))
-                    {
-                        writer.WriteLine("FILE_FOUND");
-                        writer.Flush();
-
-                        using (FileStream fileStream = File.OpenRead(sourcePath))
-                        {
-                            byte[] buffer = new byte[4096];
-                            int bytesRead;
-
-                            while ((bytesRead = fileStream.Read(buffer, 0, buffer.Length)) > 0)
-                            {
-                                stream.Write(buffer, 0, bytesRead);
-                                if (bytesRead < buffer.Length) break;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        writer.WriteLine("FILE_NOT_FOUND");
-                        writer.Flush();
-                    }
-                }
-                */
             }
         }
 

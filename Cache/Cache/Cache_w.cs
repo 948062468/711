@@ -130,26 +130,31 @@ namespace Cache
             _listener.BeginAcceptTcpClient(ClientConnected, null);
         }
 
-        private static byte[] ReassembleFileFromChunks(string chunksFolderPath)
+        private static string ReassembleFileIntoTempFile(string chunksFolderPath)
         {
-            MemoryStream reconstructedFile = new MemoryStream();
-            string[] chunkFiles = Directory.GetFiles(chunksFolderPath, "chunk_*.dat");
+            string tempFile = Path.Combine(chunksFolderPath, "reconstructed_temp.dat");
 
-            Array.Sort(chunkFiles, (file1, file2) =>
+            using (FileStream reconstructedFileStream = new FileStream(tempFile, FileMode.Create))
             {
-                int chunkNumber1 = int.Parse(Path.GetFileNameWithoutExtension(file1).Split('_')[1]);
-                int chunkNumber2 = int.Parse(Path.GetFileNameWithoutExtension(file2).Split('_')[1]);
-                return chunkNumber1.CompareTo(chunkNumber2);
-            });
+                string[] chunkFiles = Directory.GetFiles(chunksFolderPath, "chunk_*.dat");
 
-            foreach (string chunkFile in chunkFiles)
-            {
-                byte[] chunkData = File.ReadAllBytes(chunkFile);
-                reconstructedFile.Write(chunkData, 0, chunkData.Length);
+                Array.Sort(chunkFiles, (file1, file2) =>
+                {
+                    int chunkNumber1 = int.Parse(Path.GetFileNameWithoutExtension(file1).Split('_')[1]);
+                    int chunkNumber2 = int.Parse(Path.GetFileNameWithoutExtension(file2).Split('_')[1]);
+                    return chunkNumber1.CompareTo(chunkNumber2);
+                });
+
+                foreach (string chunkFile in chunkFiles)
+                {
+                    byte[] chunkData = File.ReadAllBytes(chunkFile);
+                    reconstructedFileStream.Write(chunkData, 0, chunkData.Length);
+                }
             }
 
-            return reconstructedFile.ToArray();
+            return tempFile;
         }
+
 
         private void ClientConnected(IAsyncResult ar)
         {
@@ -157,38 +162,55 @@ namespace Cache
             _listener.BeginAcceptTcpClient(ClientConnected, null);
 
             using (NetworkStream cacheStream = cacheClient.GetStream())
-            using (StreamReader cacheReader = new StreamReader(cacheStream, Encoding.UTF8))
-            using (StreamWriter cacheWriter = new StreamWriter(cacheStream, Encoding.UTF8))
             {
-                string command = cacheReader.ReadLine();
-                if (command == "LIST_FILES")
+                // 接收来自client的请求
+                byte command = (byte)cacheStream.ReadByte();
+
+                if (command == 0)
                 {
                     using (TcpClient serverClient = new TcpClient())
                     {
                         serverClient.Connect(ServerAddress, ServerPort);
                         using (NetworkStream serverStream = serverClient.GetStream())
-                        using (StreamReader serverReader = new StreamReader(serverStream, Encoding.UTF8))
-                        using (StreamWriter serverWriter = new StreamWriter(serverStream, Encoding.UTF8))
                         {
-                            serverWriter.WriteLine("LIST_FILES");
-                            serverWriter.Flush();
+                            serverStream.WriteByte(command);
+                            serverStream.Flush();
 
-                            int fileCount = int.Parse(serverReader.ReadLine());
-                            cacheWriter.WriteLine(fileCount);
-                            cacheWriter.Flush();
+                            // 读取文件数量并发送给客户端
+                            byte[] fileCountBytes = new byte[4];
+                            serverStream.Read(fileCountBytes, 0, fileCountBytes.Length);
+                            int fileCount = BitConverter.ToInt32(fileCountBytes, 0);
+                            cacheStream.Write(fileCountBytes, 0, fileCountBytes.Length);
+                            cacheStream.Flush();
 
+                            // 读取文件名并发送给客户端
                             for (int i = 0; i < fileCount; i++)
                             {
-                                string fileName = serverReader.ReadLine();
-                                cacheWriter.WriteLine(fileName);
-                                cacheWriter.Flush();
+                                byte[] fileNameLengthBytes = new byte[4];
+                                serverStream.Read(fileNameLengthBytes, 0, fileNameLengthBytes.Length);
+                                int fileNameLength = BitConverter.ToInt32(fileNameLengthBytes, 0);
+
+                                byte[] fileNameBytes = new byte[fileNameLength];
+                                serverStream.Read(fileNameBytes, 0, fileNameBytes.Length);
+                                cacheStream.Write(fileNameLengthBytes, 0, fileNameLengthBytes.Length);
+                                cacheStream.Write(fileNameBytes, 0, fileNameBytes.Length);
+                                cacheStream.Flush();
                             }
                         }
                     }
                 }
-                else if (command == "REQUEST_FILE")
+                else if (command == 1)
                 {
-                    string fileName = cacheReader.ReadLine();
+                    //接收来自client的文件名长度和文件名
+                    byte[] fileNameLengthBytes = new byte[4];
+                    cacheStream.Read(fileNameLengthBytes, 0, 4);
+                    int fileNameLength = BitConverter.ToInt32(fileNameLengthBytes, 0);
+
+                    byte[] fileNameBytes = new byte[fileNameLength];
+                    cacheStream.Read(fileNameBytes, 0, fileNameLength);
+                    string fileName = Encoding.UTF8.GetString(fileNameBytes);
+
+
                     string tempFolderPath = Path.Combine("../../../temp");
                     string cacheChunksFolderPath = Path.Combine("../../../cache_chunks");
 
@@ -198,126 +220,87 @@ namespace Cache
                     using (TcpClient serverClient = new TcpClient())
                     {
                         serverClient.Connect(ServerAddress, ServerPort);
-                        using (NetworkStream serverStream = serverClient.GetStream())
-                        using (StreamReader serverReader = new StreamReader(serverStream, Encoding.UTF8))
-                        using (StreamWriter serverWriter = new StreamWriter(serverStream, Encoding.UTF8))
+                        using (NetworkStream serverStream = serverClient.GetStream())                        
                         {
-                            serverWriter.WriteLine("SEND_FILE");
-                            serverWriter.WriteLine(fileName);
-                            serverWriter.Flush();
+                            //转发给server的获取文件内容指令 1
+                            serverStream.WriteByte(command);
+                            serverStream.Flush();
 
-                            string response = serverReader.ReadLine().Trim();
-                            if (response == "FILE_FOUND")
+                            serverStream.Write(fileNameLengthBytes, 0, 4);
+                            serverStream.Write(fileNameBytes, 0, fileNameBytes.Length);
+                            serverStream.Flush();
+
+                            
+                            // 读取 chunk 数量
+                            byte[] chunkCountBytes = new byte[4];
+                            serverStream.Read(chunkCountBytes, 0, chunkCountBytes.Length);
+                            int chunkCount = BitConverter.ToInt32(chunkCountBytes, 0);
+
+                            for (int i = 1; i <= chunkCount; i++)
                             {
-                                // 读取 chunk 数量
-                                byte[] chunkCountBytes = new byte[4];
-                                serverStream.Read(chunkCountBytes, 0, chunkCountBytes.Length);
-                                int chunkCount = BitConverter.ToInt32(chunkCountBytes, 0);
+                                byte[] operationCodeBytes = new byte[4];
+                                serverStream.Read(operationCodeBytes, 0, operationCodeBytes.Length);
+                                int operationCode = BitConverter.ToInt32(operationCodeBytes, 0);
 
-                                for (int i = 1; i <= chunkCount; i++)
+                                if (operationCode == 1) // 完整的 chunk
                                 {
-                                    byte[] operationCodeBytes = new byte[4];
-                                    serverStream.Read(operationCodeBytes, 0, operationCodeBytes.Length);
-                                    int operationCode = BitConverter.ToInt32(operationCodeBytes, 0);
+                                    //chunk内容长度
+                                    byte[] chunkLengthBytes = new byte[4];
+                                    serverStream.Read(chunkLengthBytes, 0, chunkLengthBytes.Length);
+                                    int chunkLength = BitConverter.ToInt32(chunkLengthBytes, 0);
 
-                                    if (operationCode == 1) // 完整的 chunk
-                                    {
-                                        byte[] chunkLengthBytes = new byte[4];
-                                        serverStream.Read(chunkLengthBytes, 0, chunkLengthBytes.Length);
-                                        int chunkLength = BitConverter.ToInt32(chunkLengthBytes, 0);
+                                    // 读取哈希值
+                                    byte[] hashBytes = new byte[64];
+                                    serverStream.Read(hashBytes, 0, hashBytes.Length);
+                                    string hash = Encoding.UTF8.GetString(hashBytes);
 
-                                        // 读取哈希值
-                                        byte[] hashBytes = new byte[64];
-                                        serverStream.Read(hashBytes, 0, hashBytes.Length);
-                                        string hash = Encoding.UTF8.GetString(hashBytes);
+                                    //读取chunk内容
+                                    byte[] chunkData = new byte[chunkLength];
+                                    serverStream.Read(chunkData, 0, chunkLength);
 
-                                        byte[] chunkData = new byte[chunkLength];
-                                        int bytesRead = 0;
-                                        int remainingBytes = chunkLength;
+                                    // 存储到临时文件夹
+                                    string tempFilePath = Path.Combine(tempFolderPath, $"chunk_{i}.dat");
+                                    File.WriteAllBytes(tempFilePath, chunkData);
 
-                                        while (remainingBytes > 0)
-                                        {
-                                            int readBytes = serverStream.Read(chunkData, bytesRead, remainingBytes);
-                                            bytesRead += readBytes;
-                                            remainingBytes -= readBytes;
-                                        }
-
-                                        // 存储到临时文件夹
-                                        string tempFilePath = Path.Combine(tempFolderPath, $"chunk_{i}.dat");
-                                        File.WriteAllBytes(tempFilePath, chunkData);
-
-                                        // 存储到 cache_chunks 文件夹
-                                        string cacheChunkFilePath = Path.Combine(cacheChunksFolderPath, $"{hash}.dat");
-                                        File.WriteAllBytes(cacheChunkFilePath, chunkData);
-                                    }
-                                    else if (operationCode == 0) // 哈希值
-                                    {
-                                        // 读取哈希值
-                                        byte[] hashBytes = new byte[64];
-                                        serverStream.Read(hashBytes, 0, hashBytes.Length);
-                                        string hash = Encoding.UTF8.GetString(hashBytes);
-
-                                        string cacheChunkFilePath = Path.Combine(cacheChunksFolderPath, $"{hash}.dat");
-
-                                        if (File.Exists(cacheChunkFilePath))
-                                        {
-                                            // 拷贝到临时文件夹
-                                            string tempFilePath = Path.Combine(tempFolderPath, $"chunk_{i}.dat");
-                                            File.Copy(cacheChunkFilePath, tempFilePath);
-                                        }
-                                        else
-                                        {
-                                            // 处理找不到哈希值对应的文件的情况（可以向客户端发送错误消息或中断连接）
-                                            cacheWriter.WriteLine("ERROR");
-                                            cacheWriter.WriteLine("出错：找不到哈希值对应的文件");
-                                            cacheWriter.Flush();
-
-                                            // 终止传输
-                                            break;
-                                        }
-                                    }
+                                    // 存储到 cache_chunks 文件夹
+                                    string cacheChunkFilePath = Path.Combine(cacheChunksFolderPath, $"{hash}.dat");
+                                    File.WriteAllBytes(cacheChunkFilePath, chunkData);
                                 }
-
-                                // 循环结束后处理临时文件夹中的文件
-                                byte[] reconstructedFile = ReassembleFileFromChunks(tempFolderPath);
-
-                                DirectoryInfo directory = new DirectoryInfo(tempFolderPath);
-                                foreach (FileInfo file in directory.GetFiles())
+                                else if (operationCode == 0) // 哈希值
                                 {
-                                    file.Delete();
+                                    // 读取哈希值
+                                    byte[] hashBytes = new byte[64];
+                                    serverStream.Read(hashBytes, 0, hashBytes.Length);
+                                    string hash = Encoding.UTF8.GetString(hashBytes);
+
+                                    string cacheChunkFilePath = Path.Combine(cacheChunksFolderPath, $"{hash}.dat");
+                                    
+                                    // 拷贝到临时文件夹
+                                    string tempFilePath = Path.Combine(tempFolderPath, $"chunk_{i}.dat");
+                                    File.Copy(cacheChunkFilePath, tempFilePath);
+                                    
                                 }
-
-                                // 将拼接后的文件发送给客户端
-                                cacheWriter.WriteLine("FILE_FOUND");
-                                cacheWriter.Flush();
-
-                                // 添加一个换行符以便客户端正确读取文件数据
-                                cacheWriter.WriteLine();
-                                cacheWriter.Flush();
-
-
-                                using (MemoryStream ms = new MemoryStream(reconstructedFile))
-                                {
-                                    byte[] buffer = new byte[4096];
-                                    int bytesRead;
-
-                                    while ((bytesRead = ms.Read(buffer, 0, buffer.Length)) > 0)
-                                    {
-                                        cacheStream.Write(buffer, 0, bytesRead);
-                                        if (bytesRead < buffer.Length) break;
-                                    }
-                                }
-
                             }
-                            else
+
+                            // 循环结束后处理临时文件夹中的文件
+
+                            // 将拼接后的文件发送给客户端
+                            string tempFile = ReassembleFileIntoTempFile(tempFolderPath);
+
+                            using (FileStream fileStream = new FileStream(tempFile, FileMode.Open, FileAccess.Read))
                             {
-                                cacheWriter.WriteLine("FILE_NOT_FOUND");
-                                cacheWriter.Flush();
+                                fileStream.CopyTo(cacheStream);
+                            }
+
+
+                            DirectoryInfo directory = new DirectoryInfo(tempFolderPath);
+                            foreach (FileInfo file in directory.GetFiles())
+                            {
+                                file.Delete();
                             }
                         }
                     }
                 }
-
             }
         }
     }

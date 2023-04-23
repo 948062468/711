@@ -3,6 +3,7 @@ using System.IO;
 using System.Net.Sockets;
 using System.Text;
 using System.Windows.Forms;
+using System.Net;
 
 namespace Client
 {
@@ -24,16 +25,29 @@ namespace Client
                 {
                     cacheClient.Connect("127.0.0.1", 8081);
                     using (NetworkStream cacheStream = cacheClient.GetStream())
-                    using (StreamReader cacheReader = new StreamReader(cacheStream, Encoding.UTF8))
-                    using (StreamWriter cacheWriter = new StreamWriter(cacheStream, Encoding.UTF8))
                     {
-                        cacheWriter.WriteLine("LIST_FILES");
-                        cacheWriter.Flush();
+                        // 发送操作码0，请求文件列表
+                        byte command = 0;
+                        cacheStream.WriteByte(command);
+                        cacheStream.Flush();
 
-                        int fileCount = int.Parse(cacheReader.ReadLine());
+                        // 读取文件数量
+                        byte[] fileCountBytes = new byte[4];
+                        cacheStream.Read(fileCountBytes, 0, fileCountBytes.Length);
+                        int fileCount = BitConverter.ToInt32(fileCountBytes, 0);
+
+                        // 读取文件名
                         for (int i = 0; i < fileCount; i++)
                         {
-                            listBox1.Items.Add(cacheReader.ReadLine());
+                            byte[] fileNameLengthBytes = new byte[4];
+                            cacheStream.Read(fileNameLengthBytes, 0, fileNameLengthBytes.Length);
+                            int fileNameLength = BitConverter.ToInt32(fileNameLengthBytes, 0);
+
+                            byte[] fileNameBytes = new byte[fileNameLength];
+                            cacheStream.Read(fileNameBytes, 0, fileNameBytes.Length);
+                            string fileName = Encoding.UTF8.GetString(fileNameBytes);
+
+                            listBox1.Items.Add(fileName);
                         }
                     }
                 }
@@ -71,33 +85,37 @@ namespace Client
                 {
                     cacheClient.Connect("127.0.0.1", 8081);
                     using (NetworkStream cacheStream = cacheClient.GetStream())
-                    using (StreamReader cacheReader = new StreamReader(cacheStream, Encoding.UTF8))
-                    using (StreamWriter cacheWriter = new StreamWriter(cacheStream, Encoding.UTF8))
                     {
-                        cacheWriter.WriteLine("REQUEST_FILE");
-                        cacheWriter.WriteLine(fileName);
-                        cacheWriter.Flush();
+                        //指令1，请求文件内容
+                        Byte command = 1;
+                        cacheStream.WriteByte(command);
+                        cacheStream.Flush();
 
-                        string response = cacheReader.ReadLine();
-                        if (response == "FILE_FOUND")
+                        //发送所选文件名和文件名长度
+                        byte[] fileNameBytes = Encoding.UTF8.GetBytes(fileName);
+                        byte[] fileNameLengBytes = BitConverter.GetBytes(fileNameBytes.Length);
+                        cacheStream.Write(fileNameLengBytes, 0, 4);
+                        cacheStream.Write(fileNameBytes, 0, fileNameBytes.Length);
+                        cacheStream.Flush();
+
+                        using (MemoryStream receivedImageData = new MemoryStream())
                         {
-                            MemoryStream imageMemoryStream = new MemoryStream();
-                            byte[] buffer = new byte[4096];
-                            int bytesRead;
+                            int bufferSize = 4096; // 您可以根据需要调整缓冲区大小
+                            byte[] buffer = new byte[bufferSize];
+                            int bytesRead = 0;
 
-                            while ((bytesRead = cacheStream.Read(buffer, 0, buffer.Length)) > 0)
+                            do
                             {
-                                imageMemoryStream.Write(buffer, 0, bytesRead);
-                                if (bytesRead < buffer.Length) break;
-                            }
+                                bytesRead = cacheStream.Read(buffer, 0, bufferSize);
+                                receivedImageData.Write(buffer, 0, bytesRead);
+                            } while (bytesRead > 0);
 
-                            Image image = Image.FromStream(imageMemoryStream);
-                            pictureBox1.Image = image;
+                            receivedImageData.Position = 0; // 将内存流的位置重置为0，以便从头开始读取数据
+                            Image receivedImage = Image.FromStream(receivedImageData);
+                            pictureBox1.Image = receivedImage;
                         }
-                        else
-                        {
-                            MessageBox.Show("文件未找到。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                        }
+
+
                     }
                 }
             }

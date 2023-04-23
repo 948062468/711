@@ -1,20 +1,24 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\E-Force\\Desktop\\711\\711\\Client\\Client\\Client.csproj": {}
+    "C:\\711\\711\\Client\\Client\\Client.csproj": {}
   },
   "projects": {
-    "C:\\Users\\E-Force\\Desktop\\711\\711\\Client\\Client\\Client.csproj": {
+    "C:\\711\\711\\Client\\Client\\Client.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\E-Force\\Desktop\\711\\711\\Client\\Client\\Client.csproj",
+        "projectUniqueName": "C:\\711\\711\\Client\\Client\\Client.csproj",
         "projectName": "Client",
-        "projectPath": "C:\\Users\\E-Force\\Desktop\\711\\711\\Client\\Client\\Client.csproj",
-        "packagesPath": "C:\\Users\\E-Force\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\E-Force\\Desktop\\711\\711\\Client\\Client\\obj\\",
+        "projectPath": "C:\\711\\711\\Client\\Client\\Client.csproj",
+        "packagesPath": "C:\\Users\\dtan698\\.nuget\\packages\\",
+        "outputPath": "C:\\711\\711\\Client\\Client\\obj\\",
         "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
         "configFilePaths": [
-          "C:\\Users\\E-Force\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Users\\dtan698\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
         "originalTargetFrameworks": [
@@ -58,7 +62,7 @@
               "privateAssets": "none"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\7.0.203\\RuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\7.0.102\\RuntimeIdentifierGraph.json"
         }
       }
     }
