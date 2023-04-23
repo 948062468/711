@@ -100,7 +100,7 @@ namespace Client
 
                         using (MemoryStream receivedImageData = new MemoryStream())
                         {
-                            int bufferSize = 4096; // 您可以根据需要调整缓冲区大小
+                            int bufferSize = 4096; // 缓冲区大小
                             byte[] buffer = new byte[bufferSize];
                             int bytesRead = 0;
 
